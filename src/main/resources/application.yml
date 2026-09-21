@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: auction
+  datasource:
+    url: jdbc:postgresql://localhost:5435/auction
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        show_sql: false
+    open-in-view:
+  main:
+    banner-mode: off # Don't show Spring logs
