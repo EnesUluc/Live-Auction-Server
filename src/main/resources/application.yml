@@ -16,3 +16,8 @@ spring:
     open-in-view:
   main:
     banner-mode: off # Don't show Spring logs
+  grpc:
+    server:
+      port: 9090
+      reflection:
+        enabled: false

@@ -30,5 +30,5 @@ public class Bid {
 
     private String username;
     private BigDecimal amount;
-    private Instant created_at;
+    private Instant createdAt;
 }
