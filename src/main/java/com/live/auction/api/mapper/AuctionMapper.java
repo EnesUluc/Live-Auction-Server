@@ -58,10 +58,19 @@ public class AuctionMapper {
                 .setBidCreationTime(createdTimeProto)
                 .build();
     }
-    private static Timestamp buildProtoTimestamp(long seconds, int nano) {
+    public static Timestamp buildProtoTimestamp(long seconds, int nano) {
         return Timestamp.newBuilder()
                 .setSeconds(seconds)
                 .setNanos(nano)
+                .build();
+    }
+
+    public static LiveAuctionUpdate buildLiveUpdate(Auction auction, Bid bid) {
+        return LiveAuctionUpdate.newBuilder()
+                .setAuctionId(auction.getId())
+                .setLeaderName(bid.getUsername())
+                .setNewHighestBid(bid.getAmount().doubleValue())
+                .setTimestamp(buildProtoTimestamp(Instant.now().getEpochSecond(), bid.getCreatedAt().getNano()))
                 .build();
     }
 }

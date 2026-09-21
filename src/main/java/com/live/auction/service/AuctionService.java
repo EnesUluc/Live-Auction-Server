@@ -7,12 +7,19 @@ import com.live.auction.domain.repository.AuctionRepo;
 import com.live.auction.domain.repository.BidRepo;
 import com.live.auction.grpc.*;
 
+import io.grpc.Context;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.grpc.server.service.GrpcService;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
 import java.util.stream.Stream;
 
 
@@ -21,6 +28,8 @@ import java.util.stream.Stream;
 public class AuctionService extends LiveAuctionServiceGrpc.LiveAuctionServiceImplBase {
     private final AuctionRepo auctionRepo;
     private final BidRepo bidRepo;
+
+    private final Map<String, Set<StreamObserver<LiveAuctionUpdate>>> activeRooms = new ConcurrentHashMap<>();
 
     @Override
     public void createAuction(CreateAuctionRequest auctionRequest, StreamObserver<AuctionResponse> responseObserver){
@@ -62,5 +71,89 @@ public class AuctionService extends LiveAuctionServiceGrpc.LiveAuctionServiceImp
                     Status.INTERNAL.withDescription("Internal server error during retrieving the history.").asRuntimeException()
             );
         }
+    }
+
+    @Override
+    public void watchAuctionRoom(AuctionRequest request, StreamObserver<LiveAuctionUpdate> responseObserver) {
+        String auctionId = request.getAuctionId();
+
+        // Add user to the room
+        activeRooms.computeIfAbsent(auctionId, k-> ConcurrentHashMap.newKeySet()).add(responseObserver);
+
+        // If the client network is failed, the mechanism that will clean this on the map
+        // Prevents memory leaks
+        Context.current().addListener(
+                context -> removeObservers(auctionId, responseObserver),
+                Executors.newSingleThreadExecutor()
+        );
+
+    }
+
+    @Override
+    @Transactional
+    public void placeBid(CreateBidRequest request, StreamObserver<PlaceBidResponse> responseObserver) {
+        String auctionId = request.getAuctionId();
+        BigDecimal incomingAmount = BigDecimal.valueOf(request.getAmount());
+
+        Auction auction = auctionRepo.findById(auctionId).orElse(null);
+        if (auction == null || auction.getStatus() != com.live.auction.domain.model.Status.ACTIVE) {
+            sendBidResult(responseObserver, false, "Auction is not found or not active.");
+            return;
+        }
+
+        if(incomingAmount.compareTo(auction.getCurrentHighestBid()) <= 0){
+            sendBidResult(responseObserver, false, "Incoming amount should be greater than the highest request.");
+            return;
+        }
+
+        // Update the auction's current highest bid then save
+        auction.setCurrentHighestBid(incomingAmount);
+        auctionRepo.save(auction);
+
+        // Create a bid then save
+        Bid newBid = createBid(auction, request, incomingAmount);
+        bidRepo.save(newBid);
+
+        // Broadcast the new state to the room
+        broadcastNewBid(auction, newBid);
+
+        sendBidResult(responseObserver, true, "Auction successfully placed.");
+    }
+
+    private void broadcastNewBid(Auction auction, Bid bid){
+        Set<StreamObserver<LiveAuctionUpdate>> roomObservers = activeRooms.get(auction.getId());
+
+        if(roomObservers != null && !roomObservers.isEmpty()){
+            LiveAuctionUpdate update = AuctionMapper.buildLiveUpdate(auction, bid);
+            for(StreamObserver<LiveAuctionUpdate> observer : roomObservers){
+                try{
+                    observer.onNext(update);
+                }catch (Exception e){}
+            }
+        }
+    }
+
+    private void removeObservers(String auctionId, StreamObserver<LiveAuctionUpdate> responseObserver){
+        Set<StreamObserver<LiveAuctionUpdate>> room = activeRooms.get(auctionId);
+        if (room != null){
+            room.remove(responseObserver);
+            if(room.isEmpty()){
+                activeRooms.remove(auctionId);
+            }
+        }
+    }
+
+    private void sendBidResult(StreamObserver<PlaceBidResponse> responseObserver, boolean success, String message) {
+        responseObserver.onNext(PlaceBidResponse.newBuilder().setIsSuccessful(success).setMessage(message).build());
+        responseObserver.onCompleted();
+    }
+
+    private Bid createBid(Auction auction, CreateBidRequest request, BigDecimal incomingAmount){
+        return Bid.builder()
+                .auction(auction)
+                .username(request.getUserId())
+                .amount(incomingAmount)
+                .createdAt(Instant.now())
+                .build();
     }
 }
