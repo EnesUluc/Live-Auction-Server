@@ -7,6 +7,12 @@ option java_outer_classname="LiveAuctionProto";
 
 import "google/protobuf/timestamp.proto";
 
+enum AuctionStatus {
+  ACTIVE = 0;
+  FINISHED = 1;
+  CANCELED = 2;
+}
+
 service LiveAuctionService {
   // Create a new auction - Unary Communication
   rpc CreateAuction(CreateAuctionRequest) returns (AuctionResponse);
@@ -17,20 +23,19 @@ service LiveAuctionService {
   // Streaming response for all the history about auctions
   rpc GetAuctionHistory(AuctionRequest) returns (stream BidHistoryResponse);
 
-  // The service responsible for live auction and requests - Bidirectional Communication
-  rpc BidStream(stream CreateBidRequest) returns (stream BidResponse);
+  // 1. Enter the room then watch the live auction (Server Streaming)
+  rpc WatchAuctionRoom(AuctionRequest) returns (stream LiveAuctionUpdate);
+
+  // 2. Place Bid (Unary)
+  rpc PlaceBid(CreateBidRequest) returns (PlaceBidResponse);
 }
 
-enum AuctionStatus {
-  ACTIVE = 0;
-  FINISHED = 1;
-  CANCELED = 2;
-}
 message CreateBidRequest {
   string auction_id = 1;
   string user_id = 2;
   double amount = 3;
 }
+
 message BidResponse {
   string auction_id = 1;
   string leader_name = 2;
@@ -39,6 +44,7 @@ message BidResponse {
   bool is_successful = 5;
   string message = 6;
 }
+
 message AuctionRequest {
   string auction_id = 1;
 }
@@ -67,4 +73,16 @@ message AuctionDetailResponse {
   AuctionStatus status = 4;
   google.protobuf.Timestamp end_time = 5;
   double current_highest_bid = 6;
+}
+
+message LiveAuctionUpdate {
+  string auction_id = 1;
+  string leader_name = 2;
+  double new_highest_bid = 3;
+  google.protobuf.Timestamp timestamp = 4;
+}
+
+message PlaceBidResponse {
+  bool is_successful = 1;
+  string message = 2;
 }

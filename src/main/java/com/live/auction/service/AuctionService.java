@@ -62,6 +62,5 @@ public class AuctionService extends LiveAuctionServiceGrpc.LiveAuctionServiceImp
                     Status.INTERNAL.withDescription("Internal server error during retrieving the history.").asRuntimeException()
             );
         }
-
     }
 }
