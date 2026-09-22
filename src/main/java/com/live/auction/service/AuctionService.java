@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -47,10 +48,26 @@ public class AuctionService extends LiveAuctionServiceGrpc.LiveAuctionServiceImp
                     responseObserver.onCompleted();
                 }, () -> {
                     responseObserver.onError(
-                            Status.NOT_FOUND.withDescription("Auction not found. ID: " + request.getAuctionId()).asRuntimeException()
+                            Status.NOT_FOUND.withDescription("Auction not found: " + request.getAuctionId()).asRuntimeException()
                     );
                 }
         );
+    }
+
+    @Override
+    public void getLiveAuctions(Empty request, StreamObserver<LiveAuctionList> responseObserver) {
+        try{
+            com.live.auction.domain.model.Status status = com.live.auction.domain.model.Status.ACTIVE;
+
+            List<AuctionDetailResponse> liveAuctions = auctionRepo.findAllByStatus(status).stream().map(AuctionMapper::buildAuctionDetailResponse).toList();
+
+            LiveAuctionList response = LiveAuctionList.newBuilder().addAllAuctionDetail(liveAuctions).build();
+
+            responseObserver.onNext(response);
+            responseObserver.onCompleted();
+        }catch (Exception e){
+            responseObserver.onError(Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
+        }
     }
 
     @Override

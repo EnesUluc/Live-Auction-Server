@@ -23,11 +23,20 @@ service LiveAuctionService {
   // Streaming response for all the history about auctions
   rpc GetAuctionHistory(AuctionRequest) returns (stream BidHistoryResponse);
 
+  // Lists the LIVE auctions
+  rpc GetLiveAuctions(Empty) returns (LiveAuctionList);
+
   // 1. Enter the room then watch the live auction (Server Streaming)
   rpc WatchAuctionRoom(AuctionRequest) returns (stream LiveAuctionUpdate);
 
   // 2. Place Bid (Unary)
   rpc PlaceBid(CreateBidRequest) returns (PlaceBidResponse);
+}
+
+message Empty {}
+
+message LiveAuctionList {
+  repeated AuctionDetailResponse auctionDetail = 1;
 }
 
 message CreateBidRequest {
